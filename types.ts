@@ -26,8 +26,8 @@ export interface CVContent {
     targetJobTitle: string;
     email: string;
     phone: string;
-    address?: string;
-    dateOfBirth?: string;
+    birthDate: string;
+    address: string;
   };
   professionalProfile: string;
   experience: ExperienceItem[];
@@ -45,7 +45,7 @@ export interface CVData {
   jobOfferUrl?: string;
   extraFields: ExtraField[];
   userChanges: string;
-  originalCvGenerated?: string; // This will now store stringified JSON
+  originalCvGenerated?: string;
 }
 
 export interface GeneratedResponse {

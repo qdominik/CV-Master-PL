@@ -10,36 +10,34 @@ Działasz w języku polskim. Dbaj o perfekcyjną poprawność językową.
 
 const DEVELOPER_INSTRUCTIONS = `
 ARCHITEKTURA WYJŚCIA (JSON -> React -> DOM):
-1. Model NIE generuje dokumentu HTML. Zwraca wyłącznie ustrukturyzowany JSON.
-2. Zadbaj, aby każda sekcja (personalData, professionalProfile, experience, education, skills, additional, gdprClause) była wypełniona.
+1. Model NIE generuje dokumentu HTML ani opisu swojego rozumowania. Zwraca wyłącznie ustrukturyzowany JSON.
+2. KAŻDE POLE w JSON musi zawierać WYŁĄCZNIE finalną treść dokumentu.
 
-WYTYCZNE DLA TREŚCI POD PDF:
-1. RESPONSIBILITIES (Doświadczenie): Zwracaj listę zadań jako proste zdania.
-   - WAŻNE: NIGDY nie dodawaj znaków wypunktowania (•, -, *, 1.) na początku tych stringów. Front-end sam dodaje stylizowane bullety.
-2. PROFIL ZAWODOWY: 3-5 zdań podkreślających dopasowanie do oferty.
-3. KLAUZULA RODO: Zawsze dołączaj standardową klauzulę (lub specyficzną, jeśli jest w ogłoszeniu).
-4. SUGGESTIONS: Podaj 3-5 konkretnych rad dla użytkownika (np. "Warto dodać certyfikat X").
+RYGORYSTYCZNE ZAKAZY:
+1. ZAKAZ ROZUMOWANIA W POLACH: Żadnych tekstów typu "poprawiono", "uproszczono", "wybrano główny dyplom". Podajesz tylko czysty wynik.
+2. CZYSTOŚĆ WYNIKU: Jeśli w źródle są sprzeczności, rozstrzygnij je i podaj finalną wersję.
 
-LOGIKA EDYCJI:
-Jeśli podano 'user_changes', wprowadź TYLKO te zmiany do 'original_cv_generated'. Jeśli poproszono o usunięcie pola (np. "usuń adres"), usuń go z JSONa.
+LOGIKA PODZIAŁU SEKCJI:
+- EDUKACJA: Tylko edukacja formalna (Szkoły średnie, Studia wyższe).
+- DOŚWIADCZENIE: Tylko historia zatrudnienia na stanowiskach.
+- UMIEJĘTNOŚCI: Twarde i miękkie kompetencje (np. Python, Prawo Jazdy B, Negocjacje).
+- DODATKOWE: Tutaj umieść Kursy, Szkolenia, Certyfikaty, Wolontariat, Projekty poboczne i Nagrody. Każdy element jako osobny, zwięzły ciąg znaków (np. "Kurs Pedagogiczny (2008)", "Certyfikat AWS Cloud Practitioner").
+- GADR CLAUSE: Zawsze generuj standardową klauzulę o przetwarzaniu danych po polsku na końcu.
 `;
 
 export const generateCV = async (data: CVData): Promise<GeneratedResponse> => {
-  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY || '' });
+  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
   
-  const extraFieldsString = data.extraFields
-    .map(f => `${f.key}: ${f.value}`)
-    .join('\n');
-
   const prompt = `
     DANE WEJŚCIOWE:
     cv_user_text: ${data.cvUserText || 'Analizuj PDF'}
-    job_offer_text: ${data.jobOfferText || 'Sprawdź link/opis'}
-    extra_fields: ${extraFieldsString}
+    job_offer_text: ${data.jobOfferText || 'Sprawdź opis'}
     user_changes: ${data.userChanges || 'brak'}
     original_cv_generated: ${data.originalCvGenerated || 'brak'}
     
-    ZADANIE: Wygeneruj CV w formacie JSON zoptymalizowane pod wydruk A4.
+    ZADANIE: Wygeneruj CV w formacie JSON.
+    Skup się na sekcji 'additional' dla wszystkich kursów i certyfikatów, które nie są studiami wyższymi.
+    Nie umieszczaj komentarzy ani procesów myślowych wewnątrz pól JSON.
   `;
 
   const parts: any[] = [];
@@ -53,8 +51,7 @@ export const generateCV = async (data: CVData): Promise<GeneratedResponse> => {
       contents: { parts },
       config: {
         systemInstruction: SYSTEM_INSTRUCTION + "\n" + DEVELOPER_INSTRUCTIONS,
-        temperature: 0.6,
-        tools: [{ googleSearch: {} }],
+        temperature: 0.1,
         responseMimeType: "application/json",
         responseSchema: {
           type: Type.OBJECT,
@@ -70,10 +67,10 @@ export const generateCV = async (data: CVData): Promise<GeneratedResponse> => {
                     targetJobTitle: { type: Type.STRING },
                     email: { type: Type.STRING },
                     phone: { type: Type.STRING },
-                    address: { type: Type.STRING },
-                    dateOfBirth: { type: Type.STRING }
+                    birthDate: { type: Type.STRING },
+                    address: { type: Type.STRING }
                   },
-                  required: ["fullName", "email", "phone"]
+                  required: ["fullName", "email", "phone", "birthDate", "address"]
                 },
                 professionalProfile: { type: Type.STRING },
                 experience: {
@@ -112,7 +109,9 @@ export const generateCV = async (data: CVData): Promise<GeneratedResponse> => {
       }
     });
 
-    return JSON.parse(response.text || "{}") as GeneratedResponse;
+    const text = response.text;
+    if (!text) throw new Error("Pusta odpowiedź modelu.");
+    return JSON.parse(text) as GeneratedResponse;
   } catch (error) {
     console.error(error);
     throw new Error("Błąd podczas generowania CV.");
